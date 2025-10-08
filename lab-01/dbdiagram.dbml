@@ -1,0 +1,164 @@
+///////////////////////////////////////////////////////////
+// Service Centers — Normalized Devices (dbdiagram.io)
+///////////////////////////////////////////////////////////
+
+Enum user_role {
+  client
+  technician
+  admin
+}
+
+Enum ticket_status {
+  new
+  in_progress
+  waiting_parts
+  done
+  cancelled
+}
+
+Enum ticket_priority {
+  low
+  normal
+  high
+}
+
+Enum appointment_status {
+  booked
+  checked_in
+  no_show
+  completed
+  cancelled
+}
+
+Table users {
+  user_id     bigserial [pk]
+  full_name   varchar(200) [not null]
+  phone       varchar(32)
+  email       varchar(255)
+  role        user_role [not null, default: 'client']
+  active      boolean [not null, default: true]
+  created_at  timestamptz [not null, default: `now()`]
+
+  indexes {
+    (phone) [unique]
+    (email) [unique]
+  }
+
+  Note: 'Пользователи системы'
+}
+
+Table service_centers {
+  center_id   bigserial [pk]
+  name        varchar(200) [not null]
+  address     text [not null]
+  timezone    varchar(64) [not null]
+  created_at  timestamptz [not null, default: `now()`]
+
+  indexes {
+    (name, address) [unique]
+  }
+
+  Note: 'Сервисные центры'
+}
+
+Table technicians {
+  technician_id bigserial [pk]
+  user_id       bigint [not null, unique, ref: > users.user_id]
+  center_id     bigint [not null, ref: > service_centers.center_id]
+  skill_level   smallint [not null, default: 1]
+  active        boolean [not null, default: true]
+  created_at    timestamptz [not null, default: `now()`]
+
+  Note: 'Профиль мастера (1:1 к users c role=technician)'
+}
+
+Table device_types {
+  device_type_id bigserial [pk]
+  name           varchar(100) [not null, unique]
+  description    text
+
+  Note: 'Справочник типов устройств'
+}
+
+Table device_models {
+  device_model_id bigserial [pk]
+  device_type_id  bigint [not null, ref: > device_types.device_type_id]
+  brand           varchar(100) [not null]
+  model           varchar(120) [not null]
+
+  indexes {
+    (brand, model) [unique]
+    (device_type_id)
+  }
+
+  Note: 'Справочник моделей (уникальность brand+model)'
+}
+
+Table devices {
+  device_id        bigserial [pk]
+  client_id        bigint [not null, ref: > users.user_id]
+  device_type_id   bigint [not null, ref: > device_types.device_type_id]
+  device_model_id  bigint [not null, ref: > device_models.device_model_id]
+  serial_number    varchar(120) [unique]
+  purchase_date    date
+  color            varchar(50)
+  notes            text
+
+  indexes {
+    (client_id)
+    (device_type_id, device_model_id)
+  }
+
+  Note: 'Конкретный девайс клиента'
+}
+
+Table time_slots {
+  slot_id       bigserial [pk]
+  technician_id bigint [not null, ref: > technicians.technician_id]
+  center_id     bigint [not null, ref: > service_centers.center_id]
+  starts_at     timestamptz [not null]
+  ends_at       timestamptz [not null]
+  is_booked     boolean [not null, default: false]
+
+  indexes {
+    (technician_id, starts_at) [unique]
+    (center_id, is_booked, starts_at)
+  }
+
+  Note: 'Рабочие слоты мастеров'
+}
+
+Table tickets {
+  ticket_id           bigserial [pk]
+  client_id           bigint [not null, ref: > users.user_id]
+  device_id           bigint [not null, ref: > devices.device_id]
+  created_at          timestamptz [not null, default: `now()`]
+  problem_description text [not null]
+  status              ticket_status [not null, default: 'new']
+  priority            ticket_priority [not null, default: 'normal']
+  last_updated_at     timestamptz [not null, default: `now()`]
+
+  indexes {
+    (client_id)
+    (status)
+  }
+
+  Note: 'Заявки на ремонт/диагностику'
+}
+
+Table appointments {
+  appointment_id bigserial [pk]
+  ticket_id      bigint [not null, ref: > tickets.ticket_id]
+  center_id      bigint [not null, ref: > service_centers.center_id]
+  technician_id  bigint [not null, ref: > technicians.technician_id]
+  slot_id        bigint [not null, unique, ref: > time_slots.slot_id]
+  status         appointment_status [not null, default: 'booked']
+  created_at     timestamptz [not null, default: `now()`]
+
+  indexes {
+    (technician_id)
+    (ticket_id)
+  }
+
+  Note: 'Запись клиента на конкретный слот'
+}
