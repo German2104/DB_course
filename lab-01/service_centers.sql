@@ -1,78 +1,118 @@
--- =========================
--- Service Centers (simple)
--- PostgreSQL 15+
--- =========================
+-- =========================================================
+-- ENUM-типы
+-- =========================================================
 
--- 1) Таблицы справочников
+CREATE TYPE user_role AS ENUM ('client', 'technician', 'admin');
+
+CREATE TYPE ticket_status AS ENUM ('new', 'in_progress', 'waiting_parts', 'done', 'cancelled');
+
+CREATE TYPE ticket_priority AS ENUM ('low', 'normal', 'high');
+
+CREATE TYPE appointment_status AS ENUM ('booked', 'checked_in', 'no_show', 'completed', 'cancelled');
+
+
+-- =========================================================
+-- Таблицы
+-- =========================================================
+
+CREATE TABLE IF NOT EXISTS users (
+  user_id    BIGSERIAL PRIMARY KEY,
+  full_name  VARCHAR(200) NOT NULL,
+  phone      VARCHAR(32),
+  email      VARCHAR(255),
+  role       user_role NOT NULL DEFAULT 'client',
+  active     BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT users_phone_uniq UNIQUE (phone),
+  CONSTRAINT users_email_uniq UNIQUE (email)
+);
+
 CREATE TABLE IF NOT EXISTS service_centers (
-    id        SERIAL PRIMARY KEY,
-    name      VARCHAR(100) NOT NULL,
-    address   VARCHAR(255) NOT NULL,
-    phone     VARCHAR(20),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT service_center_name_addr_unq UNIQUE (name, address)
+  center_id   BIGSERIAL PRIMARY KEY,
+  name        VARCHAR(200) NOT NULL,
+  address     TEXT NOT NULL,
+  timezone    VARCHAR(64) NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT service_centers_name_address_uniq UNIQUE (name, address)
 );
 
-CREATE TABLE IF NOT EXISTS clients (
-    id          SERIAL PRIMARY KEY,
-    full_name   VARCHAR(100) NOT NULL,
-    phone       VARCHAR(20),
-    email       VARCHAR(100),
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS technicians (
+  technician_id BIGSERIAL PRIMARY KEY,
+  user_id       BIGINT NOT NULL UNIQUE REFERENCES users(user_id),
+  center_id     BIGINT NOT NULL REFERENCES service_centers(center_id),
+  skill_level   SMALLINT NOT NULL DEFAULT 1,
+  active        BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
--- Уникальность контактов (опционально). Если не хочешь — закомментируй одну/обе строки:
-CREATE UNIQUE INDEX IF NOT EXISTS clients_email_unq ON clients(email);
-CREATE UNIQUE INDEX IF NOT EXISTS clients_phone_unq ON clients(phone);
 
--- 2) Устройства
+CREATE TABLE IF NOT EXISTS device_types (
+  device_type_id BIGSERIAL PRIMARY KEY,
+  name           VARCHAR(100) NOT NULL UNIQUE,
+  description    TEXT
+);
+
+CREATE TABLE IF NOT EXISTS device_models (
+  device_model_id BIGSERIAL PRIMARY KEY,
+  device_type_id  BIGINT NOT NULL REFERENCES device_types(device_type_id),
+  brand           VARCHAR(100) NOT NULL,
+  model           VARCHAR(120) NOT NULL,
+  CONSTRAINT device_models_brand_model_uniq UNIQUE (brand, model)
+);
+CREATE INDEX IF NOT EXISTS device_models_device_type_id_idx
+  ON device_models (device_type_id);
+
 CREATE TABLE IF NOT EXISTS devices (
-    id             SERIAL PRIMARY KEY,
-    client_id      INTEGER NOT NULL REFERENCES clients(id) ON UPDATE CASCADE ON DELETE RESTRICT,
-    type           VARCHAR(50)  NOT NULL,  -- Телефон/Ноутбук/...
-    brand          VARCHAR(50),
-    model          VARCHAR(50),
-    serial_number  VARCHAR(50),
-    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  device_id        BIGSERIAL PRIMARY KEY,
+  client_id        BIGINT NOT NULL REFERENCES users(user_id),
+  device_type_id   BIGINT NOT NULL REFERENCES device_types(device_type_id),
+  device_model_id  BIGINT NOT NULL REFERENCES device_models(device_model_id),
+  serial_number    VARCHAR(120) UNIQUE,
+  purchase_date    DATE,
+  color            VARCHAR(50),
+  notes            TEXT
 );
--- Серийник может быть NULL, но если указан — уникален:
-CREATE UNIQUE INDEX IF NOT EXISTS devices_serial_unq ON devices(serial_number) WHERE serial_number IS NOT NULL;
-CREATE INDEX IF NOT EXISTS devices_client_idx ON devices(client_id);
+CREATE INDEX IF NOT EXISTS devices_client_id_idx
+  ON devices (client_id);
+CREATE INDEX IF NOT EXISTS devices_type_model_idx
+  ON devices (device_type_id, device_model_id);
 
--- 3) Сотрудники
-CREATE TABLE IF NOT EXISTS employees (
-    id                 SERIAL PRIMARY KEY,
-    service_center_id  INTEGER NOT NULL REFERENCES service_centers(id) ON UPDATE CASCADE ON DELETE RESTRICT,
-    full_name          VARCHAR(100) NOT NULL,
-    position           VARCHAR(50),
-    active             BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS time_slots (
+  slot_id       BIGSERIAL PRIMARY KEY,
+  technician_id BIGINT NOT NULL REFERENCES technicians(technician_id),
+  center_id     BIGINT NOT NULL REFERENCES service_centers(center_id),
+  starts_at     TIMESTAMPTZ NOT NULL,
+  ends_at       TIMESTAMPTZ NOT NULL,
+  is_booked     BOOLEAN NOT NULL DEFAULT FALSE,
+  CONSTRAINT time_slots_tech_start_uniq UNIQUE (technician_id, starts_at)
 );
-CREATE INDEX IF NOT EXISTS employees_center_idx ON employees(service_center_id);
+CREATE INDEX IF NOT EXISTS time_slots_center_booked_start_idx
+  ON time_slots (center_id, is_booked, starts_at);
 
--- 4) Заказы (заявки)
-CREATE TABLE IF NOT EXISTS orders (
-    id                 SERIAL PRIMARY KEY,
-    device_id          INTEGER NOT NULL REFERENCES devices(id) ON UPDATE CASCADE ON DELETE RESTRICT,
-    employee_id        INTEGER REFERENCES employees(id) ON UPDATE CASCADE ON DELETE SET NULL,
-    service_center_id  INTEGER NOT NULL REFERENCES service_centers(id) ON UPDATE CASCADE ON DELETE RESTRICT,
-    date_received      DATE NOT NULL,
-    date_completed     DATE,
-    status             VARCHAR(30) NOT NULL,
-    description        TEXT,
-    created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT orders_status_chk CHECK (status IN (
-        'received',        -- принято
-        'in_progress',     -- в работе
-        'waiting_parts',   -- ждём запчасти
-        'done',            -- выполнено
-        'cancelled'        -- отменено
-    )),
-    CONSTRAINT orders_dates_chk CHECK (
-        date_completed IS NULL OR date_completed >= date_received
-    )
+CREATE TABLE IF NOT EXISTS tickets (
+  ticket_id           BIGSERIAL PRIMARY KEY,
+  client_id           BIGINT NOT NULL REFERENCES users(user_id),
+  device_id           BIGINT NOT NULL REFERENCES devices(device_id),
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  problem_description TEXT NOT NULL,
+  status              ticket_status NOT NULL DEFAULT 'new',
+  priority            ticket_priority NOT NULL DEFAULT 'normal',
+  last_updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS orders_device_idx  ON orders(device_id);
-CREATE INDEX IF NOT EXISTS orders_employee_idx ON orders(employee_id);
-CREATE INDEX IF NOT EXISTS orders_center_idx ON orders(service_center_id);
-CREATE INDEX IF NOT EXISTS orders_status_idx ON orders(status);
+CREATE INDEX IF NOT EXISTS tickets_client_id_idx
+  ON tickets (client_id);
+CREATE INDEX IF NOT EXISTS tickets_status_idx
+  ON tickets (status);
 
+CREATE TABLE IF NOT EXISTS appointments (
+  appointment_id BIGSERIAL PRIMARY KEY,
+  ticket_id      BIGINT NOT NULL REFERENCES tickets(ticket_id),
+  center_id      BIGINT NOT NULL REFERENCES service_centers(center_id),
+  technician_id  BIGINT NOT NULL REFERENCES technicians(technician_id),
+  slot_id        BIGINT NOT NULL UNIQUE REFERENCES time_slots(slot_id),
+  status         appointment_status NOT NULL DEFAULT 'booked',
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS appointments_technician_id_idx
+  ON appointments (technician_id);
+CREATE INDEX IF NOT EXISTS appointments_ticket_id_idx
+  ON appointments (ticket_id);

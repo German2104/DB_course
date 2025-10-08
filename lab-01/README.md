@@ -141,89 +141,148 @@
 
 ### 8.1. Описание файла service_centers.sql
 
-Файл [`service_centers.sql`](service_centers.sql) содержит упрощенную SQL реализацию спроектированной модели данных. Реализация включает основные таблицы и ограничения целостности данных.
+Файл [service_centers.sql](service_centers.sql) содержит минималистичную SQL-реализацию нормализованной модели сервисных центров для PostgreSQL. Включены перечислимые типы (ENUM) и основные таблицы с ключами, уникальными ограничениями и индексами.
 
 ### 8.2. Структура базы данных
 
-#### Основные таблицы:
+**Перечислимые типы (ENUM):**
+- **user_role**: client, technician, admin
+- **ticket_status**: new, in_progress, waiting_parts, done, cancelled
+- **ticket_priority**: low, normal, high
+- **appointment_status**: booked, checked_in, no_show, completed, cancelled
 
-**service_centers** - Справочник сервисных центров
-- `id` (SERIAL PRIMARY KEY) - уникальный идентификатор
-- `name` (VARCHAR(100)) - название сервисного центра
-- `address` (VARCHAR(255))- адрес центра
-- `phone` (VARCHAR(20)) - контактный телефон
-- `created_at` (TIMESTAMPTZ) - время создания записи
-- Ограничение: уникальность комбинации name + address
+**Таблицы:**
 
-**clients** - Клиенты системы
-- `id` (SERIAL PRIMARY KEY) - уникальный идентификатор клиента
-- `full_name` (VARCHAR(100)) - полное имя клиента
-- `phone` (VARCHAR(20)) - номер телефона (уникальный)
-- `email` (VARCHAR(100)) - адрес электронной почты (уникальный)
-- `created_at` (TIMESTAMPTZ) - время регистрации
-- Индексы: уникальность по email и phone
+**users — пользователи системы**
+- `user_id` (BIGSERIAL, PK) — идентификатор пользователя
+- `full_name` (VARCHAR(200)) — ФИО
+- `phone` (VARCHAR(32)) — телефон (уникальный)
+- `email` (VARCHAR(255)) — email (уникальный)
+- `role` (user_role) — роль пользователя (по умолчанию client)
+- `active` (BOOLEAN) — активность (по умолчанию TRUE)
+- `created_at` (TIMESTAMPTZ) — время создания (по умолчанию now())
 
-**devices** - Устройства клиентов
-- `id` (SERIAL PRIMARY KEY) - уникальный идентификатор устройства
-- `client_id` (INTEGER, FK) - связь с клиентом
-- `type` (VARCHAR(50)) - тип устройства (телефон, ноутбук)
-- `brand` (VARCHAR(50)) - бренд устройства
-- `model` (VARCHAR(50)) - модель устройства
-- `serial_number` (VARCHAR(50)) - серийный номер (уникальный, если указан)
-- `created_at` (TIMESTAMPTZ) - время добавления
-- Внешний ключ: client_id -> clients(id)
+Ограничения: UNIQUE(phone), UNIQUE(email)
 
-**employees** - Сотрудники сервисных центров
-- `id` (SERIAL PRIMARY KEY) - уникальный идентификатор сотрудника
-- `service_center_id` (INTEGER, FK) - привязка к сервисному центру  
-- `full_name` (VARCHAR(100)) - полное имя сотрудника
-- `position` (VARCHAR(50)) - должность
-- `active` (BOOLEAN) - активность сотрудника
-- `created_at` (TIMESTAMPTZ) - время создания записи
-- Внешний ключ: service_center_id -> service_centers(id)
+**service_centers — справочник сервисных центров**
+- `center_id` (BIGSERIAL, PK) — идентификатор центра
+- `name` (VARCHAR(200)) — название
+- `address` (TEXT) — адрес
+- `timezone` (VARCHAR(64)) — часовой пояс
+- `created_at` (TIMESTAMPTZ) — создано
 
-**orders** - Заказы на ремонт
-- `id` (SERIAL PRIMARY KEY) - уникальный идентификатор заказа
-- `device_id` (INTEGER, FK) - устройство для ремонта
-- `employee_id` (INTEGER, FK) - назначенный сотрудник
-- `service_center_id` (INTEGER, FK) - сервисный центр
-- `date_received` (DATE) - дата принятия заказа
-- `date_completed` (DATE) - дата завершения (может быть NULL)
-- `status` (VARCHAR(30)) - статус заказа
-- `description` (TEXT) - описание проблемы
-- `created_at` (TIMESTAMPTZ) - время создания
-- Внешние ключи: device_id, employee_id, service_center_id
-- Check-ограничения: допустимые статусы и валидация дат
+Ограничения: UNIQUE(name, address)
+
+**technicians — профиль мастера (1:1 к users)**
+- `technician_id` (BIGSERIAL, PK) — идентификатор мастера
+- `user_id` (BIGINT, FK) — ссылка на users(user_id) (UNIQUE, каждый мастер — отдельный user)
+- `center_id` (BIGINT, FK) — ссылка на service_centers(center_id)
+- `skill_level` (SMALLINT) — уровень навыка (по умолчанию 1)
+- `active` (BOOLEAN) — активность (по умолчанию TRUE)
+- `created_at` (TIMESTAMPTZ) — создано
+
+**device_types — типы устройств (справочник)**
+- `device_type_id` (BIGSERIAL, PK) — идентификатор типа
+- `name` (VARCHAR(100)) — наименование типа (UNIQUE)
+- `description` (TEXT) — описание
+
+**device_models — модели устройств (справочник)**
+- `device_model_id` (BIGSERIAL, PK) — идентификатор модели
+- `device_type_id` (BIGINT, FK) — ссылка на device_types(device_type_id)
+- `brand` (VARCHAR(100)) — бренд
+- `model` (VARCHAR(120)) — модель
+
+Ограничения: UNIQUE(brand, model)
+Индексы: INDEX(device_type_id)
+
+**devices — конкретные устройства клиентов**
+- `device_id` (BIGSERIAL, PK) — идентификатор устройства
+- `client_id` (BIGINT, FK) — владелец → users(user_id)
+- `device_type_id` (BIGINT, FK) — тип → device_types(device_type_id)
+- `device_model_id` (BIGINT, FK) — модель → device_models(device_model_id)
+- `serial_number` (VARCHAR(120)) — серийный номер (UNIQUE, если указан)
+- `purchase_date` (DATE) — дата покупки
+- `color` (VARCHAR(50)) — цвет
+- `notes` (TEXT) — примечания
+
+Индексы: INDEX(client_id), INDEX(device_type_id, device_model_id)
+
+**time_slots — рабочие слоты мастеров**
+- `slot_id` (BIGSERIAL, PK) — идентификатор слота
+- `technician_id` (BIGINT, FK) — мастер → technicians(technician_id)
+- `center_id` (BIGINT, FK) — центр → service_centers(center_id)
+- `starts_at` (TIMESTAMPTZ) — начало
+- `ends_at` (TIMESTAMPTZ) — окончание
+- `is_booked` (BOOLEAN) — признак брони (по умолчанию FALSE)
+
+Ограничения: UNIQUE(technician_id, starts_at)
+Индексы: INDEX(center_id, is_booked, starts_at)
+
+**tickets — заявки на ремонт/диагностику**
+- `ticket_id` (BIGSERIAL, PK) — идентификатор заявки
+- `client_id` (BIGINT, FK) — клиент → users(user_id)
+- `device_id` (BIGINT, FK) — устройство → devices(device_id)
+- `created_at` (TIMESTAMPTZ) — создано (по умолчанию now())
+- `problem_description` (TEXT) — описание проблемы
+- `status` (ticket_status) — статус (по умолчанию new)
+- `priority` (ticket_priority) — приоритет (по умолчанию normal)
+- `last_updated_at` (TIMESTAMPTZ) — обновлено (по умолчанию now())
+
+Индексы: INDEX(client_id), INDEX(status)
+
+**appointments — записи на приём (привязка к слоту)**
+- `appointment_id` (BIGSERIAL, PK) — идентификатор записи
+- `ticket_id` (BIGINT, FK) — заявка → tickets(ticket_id)
+- `center_id` (BIGINT, FK) — центр → service_centers(center_id)
+- `technician_id` (BIGINT, FK) — мастер → technicians(technician_id)
+- `slot_id` (BIGINT, FK, UNIQUE) — слот → time_slots(slot_id) (1 слот = 1 запись)
+- `status` (appointment_status) — статус (по умолчанию booked)
+- `created_at` (TIMESTAMPTZ) — создано (по умолчанию now())
+
+Индексы: INDEX(technician_id), INDEX(ticket_id)
 
 ### 8.3. Ограничения целостности
 
-**Статусы заказов:**
-- `received` - принято
-- `in_progress` - в работе  
-- `waiting_parts` - ждём запчасти
-- `done` - выполнено
-- `cancelled` - отменено
+**Статусы и роли:**
+Реализованы через ENUM-типы PostgreSQL:
+- **ticket_status**: new, in_progress, waiting_parts, done, cancelled
+- **appointment_status**: booked, checked_in, no_show, completed, cancelled
+- **ticket_priority**: low, normal, high
+- **user_role**: client, technician, admin
 
-**Валидация данных:**
-- Проверка корректности статусов через CHECK constraint
-- Валидация дат: дата завершения не может быть раньше даты принятия
-- Уникальность серийных номеров устройств (если указаны)
-- Уникальность контактных данных клиентов
+**Ссылочная целостность:**
+Все внешние ключи указывают на соответствующие PK родительских таблиц (режим по умолчанию — NO ACTION).
+
+**Уникальность и бизнес-правила:**
+- **users**: уникальные phone и email
+- **service_centers**: уникальная пара (name, address)
+- **technicians**: user_id — уникален (1:1 с users)
+- **device_types.name** — уникален
+- **device_models(brand, model)** — уникальны
+- **devices.serial_number** — уникален (если задан)
+- **time_slots(technician_id, starts_at)** — уникальны
+- **appointments.slot_id** — уникален (нельзя записать двух клиентов в один слот)
+
+Примечание: логическую проверку времени (например, ends_at > starts_at) можно добавить CHECK-ограничением при необходимости.
 
 ### 8.4. Индексы для оптимизации
 
-Созданы индексы для ускорения частых запросов:
-- По клиентам для устройств (`devices_client_idx`)
-- По сервисным центрам для сотрудников (`employees_center_idx`)  
-- По устройствам, сотрудникам, центрам и статусам для заказов
-- Уникальные индексы для обеспечения целостности данных
+- **device_models(device_type_id)** — фильтрация моделей по типу
+- **devices(client_id)** — выборка устройств клиента
+- **devices(device_type_id, device_model_id)** — поиск по типу+модели
+- **time_slots(center_id, is_booked, starts_at)** — выдача свободных слотов по центру/дате
+- **tickets(client_id)** — список заявок клиента
+- **tickets(status)** — панель «заявки в работе»
+- **appointments(technician_id), appointments(ticket_id)** — расписание мастера / связка с тикетом
+- Все перечисленные UNIQUE также создают соответствующие уникальные индексы
 
 ### 8.5. Особенности реализации
 
-1. **Каскадные обновления** - при изменении ключей родительских записей автоматически обновляются связанные записи
-2. **Защита от удаления** - критически важные записи защищены от случайного удаления через RESTRICT
-3. **Null-безопасность** - серийные номера могут отсутствовать, но если указаны - должны быть уникальными
-4. **Временные метки** - все таблицы содержат информацию о времени создания записей
-5. **Проверка данных** - CHECK constraints обеспечивают корректность вводимых данных
+- **Нормализация**: вынесены device_types и device_models, что исключает дубли бренда/модели и упрощает аналитику.
+- **Жёсткая типизация статусов** через ENUM предотвращает «мусорные» значения.
+- **Null-безопасность серийного номера**: поле может быть пустым; при заполнении соблюдается уникальность.
+- **Мягкая политика удаления**: по умолчанию — NO ACTION/RESTRICT; каскады не заданы, чтобы не потерять данные по ошибке.
+- **Простая бронь слотов**: UNIQUE(slot_id) в appointments и UNIQUE(technician_id, starts_at) в time_slots исключают двойное бронирование.
+- **Аудит-поля**: created_at есть во всех ключевых таблицах; при желании можно добавить триггеры на авто-обновление last_updated_at у tickets.
 
-Данная SQL реализация обеспечивает надежное хранение данных системы записи в сервисные центры с соблюдением принципов реляционной модели данных.
+Такая реализация обеспечивает чистые инварианты (уникальности, ссылочная целостность, валидные статусы), быстрые типовые запросы за счёт индексов и прозрачное масштабирование функционала (расписание, очередь заявок, аналитика по типам/моделям).
