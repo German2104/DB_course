@@ -1,7 +1,8 @@
 -- Подборка примеров SELECT с агрегацией и соединениями
--- Скрипт только читает данные; порядок выполнения произвольный
+-- Скрипт только читает данные; порядок выполнения произвольный, каждый запрос снабжён пояснениями
 
 -- 1) Нагрузка по центрам: количество тикетов по статусам + вес по приоритетам
+--    Используем CASE для подсчёта «очков нагрузки» и группируем по центру/статусу
 SELECT sc.name AS center,
        t.status,
        COUNT(*) AS tickets_count,
@@ -13,6 +14,7 @@ GROUP BY sc.name, t.status
 ORDER BY sc.name, t.status;
 
 -- 2) Среднее число занятых слотов мастеров за день и доля завершённых приёмов
+--    LEFT JOIN, чтобы мастера без слотов тоже попали; FILTER/AVG по статусу завершения
 SELECT tech.technician_id,
        u.full_name AS technician,
        DATE(ts.starts_at) AS work_date,
@@ -26,6 +28,7 @@ GROUP BY tech.technician_id, u.full_name, DATE(ts.starts_at)
 ORDER BY work_date, technician;
 
 -- 3) Популярные модели устройств по числу тикетов
+--    Подсчёт обращений по связке бренд/модель, фильтрация через HAVING
 SELECT dm.brand, dm.model, COUNT(t.ticket_id) AS tickets
 FROM tickets t
 JOIN devices d ON d.device_id = t.device_id
@@ -35,6 +38,7 @@ HAVING COUNT(t.ticket_id) >= 1
 ORDER BY tickets DESC, dm.brand;
 
 -- 4) Клиенты с несколькими активными обращениями (new/in_progress/waiting_parts)
+--    Демонстрация HAVING и агрегатов MIN/MAX для дат
 SELECT u.full_name,
        COUNT(*) AS open_tickets,
        MIN(t.created_at) AS first_opened_at,
@@ -47,6 +51,7 @@ HAVING COUNT(*) > 1
 ORDER BY open_tickets DESC;
 
 -- 5) Расписание приёмов с детализацией клиента и устройства (JOIN без агрегации)
+--    Собираем данные из всех сущностей, сортируем по времени начала слота
 SELECT a.appointment_id,
        sc.name AS center,
        u.full_name AS technician,

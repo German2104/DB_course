@@ -1,6 +1,7 @@
--- Представления для аналитики
+-- Представления для аналитики: создаём 3 вьюхи и снабжаем пояснениями
 
 -- Итоги по центрам: слоты, тикеты, завершения
+-- Показывает общий объём слотов, сколько занято, сколько завершённых приёмов и открытых тикетов
 CREATE OR REPLACE VIEW vw_center_summary AS
 SELECT sc.center_id,
        sc.name AS center,
@@ -15,6 +16,7 @@ LEFT JOIN tickets t ON t.ticket_id = a.ticket_id
 GROUP BY sc.center_id, sc.name;
 
 -- Сводка по клиентам: количество обращений и «вес» по приоритету
+-- Включает закрытые/открытые тикеты и максимальную дату взаимодействия
 CREATE OR REPLACE VIEW vw_client_ticket_summary AS
 SELECT u.user_id,
        u.full_name,
@@ -29,6 +31,7 @@ WHERE u.role = 'client'
 GROUP BY u.user_id, u.full_name;
 
 -- Расписание мастеров с детализацией по клиенту и статусу
+-- LEFT JOIN, чтобы выводить слоты даже без брони, плюс поясняющий статус appointment_status
 CREATE OR REPLACE VIEW vw_technician_schedule AS
 SELECT tech.technician_id,
        u.full_name AS technician,
