@@ -1,6 +1,6 @@
 -- Лабораторная работа №3. Процедуры, функции и триггеры
 -- БД: Система записи в сервисные центры (продолжение схемы из lab-02)
--- Скрипт создаёт 3 хранимые функции/процедуры и 4 триггера с обработкой ошибок
+-- Скрипт создаёт 3 хранимые функции/процедуры и 4 триггера с обработкой ошибок, снабжён комментариями
 
 -- Очистка предыдущих объектов, чтобы скрипт можно было запускать многократно
 DROP TRIGGER IF EXISTS trg_validate_appointment ON appointments;
@@ -24,6 +24,7 @@ AS $$
 DECLARE
   v_is_active BOOLEAN;
 BEGIN
+  -- проверяем статус тикета; если отсутствует, выбрасываем бизнес-ошибку
   SELECT status NOT IN ('done', 'cancelled')
   INTO v_is_active
   FROM tickets
@@ -43,6 +44,7 @@ RETURNS TABLE(total_slots INT, booked_slots INT, utilization_percent NUMERIC(5,2
 LANGUAGE plpgsql
 AS $$
 BEGIN
+  -- собираем агрегаты по слотом мастера и отдаём одной строкой
   RETURN QUERY
   SELECT
     COUNT(*)::INT AS total_slots,
@@ -77,7 +79,7 @@ DECLARE
   v_technician_id BIGINT;
   v_is_booked     BOOLEAN;
 BEGIN
-  -- Проверяем клиента
+  -- Проверяем клиента: должен быть активным и с ролью client
   SELECT user_id
   INTO v_client_id
   FROM users
@@ -104,7 +106,7 @@ BEGIN
       ERRCODE = 'RB002';
   END IF;
 
-  -- Проверяем слот
+  -- Проверяем слот и блокируем строку FOR UPDATE, чтобы избежать гонки
   SELECT center_id, technician_id, is_booked
   INTO v_center_id, v_technician_id, v_is_booked
   FROM time_slots
@@ -123,16 +125,17 @@ BEGIN
       ERRCODE = 'RB004';
   END IF;
 
-  -- Создаём тикет
+  -- Создаём тикет с указанным приоритетом и описанием
   INSERT INTO tickets (client_id, device_id, problem_description, priority)
   VALUES (v_client_id, v_device_id, p_problem, p_priority)
   RETURNING ticket_id INTO v_ticket_id;
 
-  -- Бронируем слот
+  -- Бронируем слот, создавая запись на приём
   INSERT INTO appointments (ticket_id, center_id, technician_id, slot_id, status)
   VALUES (v_ticket_id, v_center_id, v_technician_id, p_slot_id, 'booked');
 
 EXCEPTION
+  -- Преобразуем системные ошибки в бизнес-коды RB01x с подсказками
   WHEN unique_violation THEN
     RAISE EXCEPTION USING
       MESSAGE = 'Нарушена уникальность при создании записи: ' || SQLERRM,
@@ -159,6 +162,7 @@ DECLARE
   v_slot RECORD;
   v_ticket_status ticket_status;
 BEGIN
+  -- проверяем наличие слота
   SELECT slot_id, center_id, technician_id, is_booked
   INTO v_slot
   FROM time_slots
@@ -168,10 +172,12 @@ BEGIN
     RAISE EXCEPTION 'Нельзя создать запись: слот % не существует', NEW.slot_id;
   END IF;
 
+  -- запрещаем бронировать занятый слот (вставка или смена слота)
   IF (TG_OP = 'INSERT' OR NEW.slot_id <> OLD.slot_id) AND v_slot.is_booked THEN
     RAISE EXCEPTION 'Слот % уже занят', v_slot.slot_id;
   END IF;
 
+  -- мастер записи должен совпадать с мастером слота
   IF NEW.technician_id IS DISTINCT FROM v_slot.technician_id THEN
     RAISE EXCEPTION 'Слот % относится к другому мастеру', v_slot.slot_id;
   END IF;
@@ -179,6 +185,7 @@ BEGIN
   -- Подтягиваем центр из слота, чтобы исключить несовпадения
   NEW.center_id := v_slot.center_id;
 
+  -- проверяем тикет и его статус
   SELECT status
   INTO v_ticket_status
   FROM tickets
@@ -202,6 +209,7 @@ RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
 BEGIN
+  -- после вставки записи помечаем слот занятым
   UPDATE time_slots
   SET is_booked = TRUE
   WHERE slot_id = NEW.slot_id;
@@ -215,6 +223,7 @@ RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
 BEGIN
+  -- после удаления записи сбрасываем флаг занятости слота
   UPDATE time_slots
   SET is_booked = FALSE
   WHERE slot_id = OLD.slot_id;
@@ -228,6 +237,7 @@ RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
 BEGIN
+  -- перетираем last_updated_at, если поменялись статус или приоритет
   IF NEW.status IS DISTINCT FROM OLD.status
      OR NEW.priority IS DISTINCT FROM OLD.priority THEN
     NEW.last_updated_at := now();
@@ -236,7 +246,7 @@ BEGIN
 END;
 $$;
 
--- Привязка триггеров
+-- Привязка триггеров к таблицам/операциям
 CREATE TRIGGER trg_validate_appointment
 BEFORE INSERT OR UPDATE ON appointments
 FOR EACH ROW EXECUTE FUNCTION validate_appointment();

@@ -1,5 +1,5 @@
 -- Наполнение справочников и основных таблиц тестовыми данными
--- Выполняется после schema.sql
+-- Выполняется после schema.sql; значения подобраны так, чтобы покрыть связи
 
 -- Пользователи (клиенты, мастера, администратор)
 INSERT INTO users (full_name, phone, email, role) VALUES
@@ -10,12 +10,12 @@ INSERT INTO users (full_name, phone, email, role) VALUES
   ('Elena Petrova', '+7-812-555-2202', 'elena.petrova@svc.com', 'technician'),
   ('Ivan Admin', '+7-999-555-3003', 'admin@example.com', 'admin');
 
--- Сервисные центры
+-- Сервисные центры: адреса и таймзоны
 INSERT INTO service_centers (name, address, timezone) VALUES
   ('TechFix Downtown', '123 Main St, City Center', 'Europe/Moscow'),
   ('GadgetCare North', '50 North Ave, Uptown', 'Europe/Moscow');
 
--- Профили мастеров
+-- Профили мастеров: связываем с users и центрами по email/названию
 INSERT INTO technicians (user_id, center_id, skill_level)
 SELECT u.user_id, sc.center_id, data.skill_level
 FROM (
@@ -26,13 +26,13 @@ FROM (
 JOIN users u ON u.email = data.email
 JOIN service_centers sc ON sc.name = data.center_name;
 
--- Типы устройств
+-- Типы устройств (справочник)
 INSERT INTO device_types (name, description) VALUES
   ('Smartphone', 'Телефоны и смартфоны'),
   ('Laptop', 'Ноутбуки и ультрабуки'),
   ('Tablet', 'Планшеты');
 
--- Модели устройств
+-- Модели устройств: связываем с типами через name -> device_type_id
 INSERT INTO device_models (device_type_id, brand, model)
 SELECT dt.device_type_id, data.brand, data.model
 FROM (
@@ -45,7 +45,7 @@ FROM (
 ) AS data(type_name, brand, model)
 JOIN device_types dt ON dt.name = data.type_name;
 
--- Устройства клиентов
+-- Устройства клиентов: проверяем принадлежность клиента, типа и модели
 INSERT INTO devices (client_id, device_type_id, device_model_id, serial_number, purchase_date, color, notes)
 SELECT u.user_id, dt.device_type_id, dm.device_model_id, data.serial_number, data.purchase_date, data.color, data.notes
 FROM (
@@ -60,7 +60,7 @@ JOIN users u ON u.email = data.email
 JOIN device_types dt ON dt.name = data.type_name
 JOIN device_models dm ON dm.brand = data.brand AND dm.model = data.model_name;
 
--- Рабочие слоты мастеров (часть уже забронирована)
+-- Рабочие слоты мастеров (часть уже забронирована) — проверяется связность по email и центру
 INSERT INTO time_slots (technician_id, center_id, starts_at, ends_at, is_booked)
 SELECT t.technician_id, t.center_id, data.starts_at, data.ends_at, data.is_booked
 FROM (
@@ -74,7 +74,7 @@ FROM (
 JOIN technicians t ON t.user_id = (SELECT user_id FROM users WHERE email = data.email)
 JOIN service_centers sc ON sc.name = data.center_name AND sc.center_id = t.center_id;
 
--- Заявки
+-- Заявки (tickets): создаём обращения по устройствам клиентов
 INSERT INTO tickets (client_id, device_id, created_at, problem_description, status, priority, last_updated_at)
 SELECT u.user_id, d.device_id, data.created_at, data.problem_description, data.status::ticket_status, data.priority::ticket_priority, data.last_updated_at
 FROM (
@@ -87,7 +87,7 @@ FROM (
 JOIN users u ON u.email = data.email
 JOIN devices d ON d.serial_number = data.serial_number;
 
--- Записи на приём (для занятых слотов)
+-- Записи на приём (appointments): используем уже занятые слоты
 INSERT INTO appointments (ticket_id, center_id, technician_id, slot_id, status, created_at)
 SELECT t.ticket_id, ts.center_id, ts.technician_id, ts.slot_id, data.status::appointment_status, data.created_at
 FROM (
