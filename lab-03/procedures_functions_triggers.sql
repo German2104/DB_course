@@ -66,7 +66,7 @@ CREATE OR REPLACE PROCEDURE book_ticket_with_slot(
   p_client_email    TEXT,
   p_device_serial   TEXT,
   p_problem         TEXT,
-  p_priority        ticket_priority DEFAULT 'normal',
+  p_priority        ticket_priority,
   p_slot_id         BIGINT
 )
 LANGUAGE plpgsql
@@ -89,7 +89,7 @@ BEGIN
 
   IF NOT FOUND THEN
     RAISE EXCEPTION USING
-      MESSAGE = format('Клиент с email % не найден или неактивен', p_client_email),
+      MESSAGE = format('Клиент с email %s не найден или неактивен', p_client_email),
       ERRCODE = 'RB001';
   END IF;
 
@@ -102,7 +102,7 @@ BEGIN
 
   IF NOT FOUND THEN
     RAISE EXCEPTION USING
-      MESSAGE = format('У клиента нет устройства с серийным номером %', p_device_serial),
+      MESSAGE = format('У клиента нет устройства с серийным номером %s', p_device_serial),
       ERRCODE = 'RB002';
   END IF;
 
@@ -115,13 +115,13 @@ BEGIN
 
   IF NOT FOUND THEN
     RAISE EXCEPTION USING
-      MESSAGE = format('Слот % не найден', p_slot_id),
+      MESSAGE = format('Слот %s не найден', p_slot_id),
       ERRCODE = 'RB003';
   END IF;
 
   IF v_is_booked THEN
     RAISE EXCEPTION USING
-      MESSAGE = format('Слот % уже забронирован', p_slot_id),
+      MESSAGE = format('Слот %s уже забронирован', p_slot_id),
       ERRCODE = 'RB004';
   END IF;
 

@@ -23,3 +23,18 @@
   - Управлять всеми заявками в системе
   - Контролировать работу мастеров
   - Администрировать систему
+
+## Как запускать лабы 1–4
+Нужен запущенный PostgreSQL и клиент `psql`. Также должна существовать база данных, в которую вы будете прогонять скрипты.
+
+- Быстро для macOS (Homebrew):
+  - Запустить сервер: `brew services start postgresql@14` (или `brew services start postgresql`)
+  - Создать БД (один раз): `createdb db_course`
+  - Запуск: `PGDATABASE=db_course ./run_lab.sh 2`
+
+- Вариант 1 (проще всего): выставить `DATABASE_URL` и запустить интерактивный скрипт:
+  - `DATABASE_URL="postgres://user:pass@localhost:5432/db_course" ./run_lab.sh`
+  - Скрипт спросит номер лабы (1/2/3/4) и выполнит нужные SQL-файлы.
+- Вариант 2: настроить переменные `PGHOST/PGPORT/PGUSER/PGDATABASE` и запускать без `DATABASE_URL`:
+  - `export PGDATABASE=db_course`
+  - `./run_lab.sh 3`

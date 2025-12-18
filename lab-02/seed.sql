@@ -47,7 +47,13 @@ JOIN device_types dt ON dt.name = data.type_name;
 
 -- Устройства клиентов: проверяем принадлежность клиента, типа и модели
 INSERT INTO devices (client_id, device_type_id, device_model_id, serial_number, purchase_date, color, notes)
-SELECT u.user_id, dt.device_type_id, dm.device_model_id, data.serial_number, data.purchase_date, data.color, data.notes
+SELECT u.user_id,
+       dt.device_type_id,
+       dm.device_model_id,
+       data.serial_number,
+       data.purchase_date::date,
+       data.color,
+       data.notes
 FROM (
   VALUES
     ('alice.johnson@example.com', 'Smartphone', 'Apple', 'iPhone 14', 'A-IPH14-001', '2023-11-12', 'Blue', 'Треснуло стекло'),
@@ -62,7 +68,11 @@ JOIN device_models dm ON dm.brand = data.brand AND dm.model = data.model_name;
 
 -- Рабочие слоты мастеров (часть уже забронирована) — проверяется связность по email и центру
 INSERT INTO time_slots (technician_id, center_id, starts_at, ends_at, is_booked)
-SELECT t.technician_id, t.center_id, data.starts_at, data.ends_at, data.is_booked
+SELECT t.technician_id,
+       t.center_id,
+       data.starts_at::timestamptz,
+       data.ends_at::timestamptz,
+       data.is_booked
 FROM (
   VALUES
     ('dmitry.kozlov@svc.com', 'TechFix Downtown', '2024-04-01 09:00+03', '2024-04-01 10:00+03', TRUE),
@@ -76,7 +86,13 @@ JOIN service_centers sc ON sc.name = data.center_name AND sc.center_id = t.cente
 
 -- Заявки (tickets): создаём обращения по устройствам клиентов
 INSERT INTO tickets (client_id, device_id, created_at, problem_description, status, priority, last_updated_at)
-SELECT u.user_id, d.device_id, data.created_at, data.problem_description, data.status::ticket_status, data.priority::ticket_priority, data.last_updated_at
+SELECT u.user_id,
+       d.device_id,
+       data.created_at::timestamptz,
+       data.problem_description,
+       data.status::ticket_status,
+       data.priority::ticket_priority,
+       data.last_updated_at::timestamptz
 FROM (
   VALUES
     ('alice.johnson@example.com', 'A-IPH14-001', '2024-03-28 09:15+03', 'Замена дисплея после падения', 'new', 'high', '2024-03-28 09:15+03'),
@@ -89,7 +105,12 @@ JOIN devices d ON d.serial_number = data.serial_number;
 
 -- Записи на приём (appointments): используем уже занятые слоты
 INSERT INTO appointments (ticket_id, center_id, technician_id, slot_id, status, created_at)
-SELECT t.ticket_id, ts.center_id, ts.technician_id, ts.slot_id, data.status::appointment_status, data.created_at
+SELECT t.ticket_id,
+       ts.center_id,
+       ts.technician_id,
+       ts.slot_id,
+       data.status::appointment_status,
+       data.created_at::timestamptz
 FROM (
   VALUES
     ('alice.johnson@example.com', 'A-IPH14-001', '2024-03-28 09:15+03', 'completed', '2024-04-01 09:00+03', 'dmitry.kozlov@svc.com'),
@@ -98,4 +119,6 @@ FROM (
 ) AS data(email, serial_number, created_at, status, slot_starts_at, technician_email)
 JOIN tickets t ON t.device_id = (SELECT device_id FROM devices WHERE serial_number = data.serial_number)
 JOIN technicians tech ON tech.user_id = (SELECT user_id FROM users WHERE email = data.technician_email)
-JOIN time_slots ts ON ts.is_booked = TRUE AND ts.starts_at = data.slot_starts_at AND ts.technician_id = tech.technician_id;
+JOIN time_slots ts ON ts.is_booked = TRUE
+                 AND ts.starts_at = data.slot_starts_at::timestamptz
+                 AND ts.technician_id = tech.technician_id;

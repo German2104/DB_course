@@ -14,6 +14,11 @@ psql -f lab-03/procedures_functions_triggers.sql
 psql -f lab-03/demo.sql                       # демонстрация
 ```
 
+Также можно через общий скрипт из корня репозитория:
+```bash
+./run_lab.sh 3
+```
+
 ## Подробно про каждый объект
 
 ### Очистка (в начале `procedures_functions_triggers.sql`)
