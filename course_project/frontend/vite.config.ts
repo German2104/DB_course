@@ -8,5 +8,9 @@ export default defineConfig({
     proxy: {
       '/api': 'http://backend:8000'
     }
+  },
+  test: {
+    environment: 'jsdom',
+    setupFiles: './src/setupTests.ts'
   }
 })

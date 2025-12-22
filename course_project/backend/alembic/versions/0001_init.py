@@ -14,8 +14,7 @@ branch_labels = None
 depends_on = None
 
 
-BASE_DIR = Path(__file__).resolve().parents[3]
-DB_DIR = BASE_DIR / 'db'
+DB_DIR = Path('/db')
 
 
 def _run_sql(filename: str) -> None:
