@@ -1,0 +1,12 @@
+CREATE INDEX idx_courses_created_by ON courses (created_by);
+CREATE INDEX idx_course_instructors_course ON course_instructors (course_id, instructor_id);
+CREATE INDEX idx_course_enrollments_course ON course_enrollments (course_id, student_id);
+CREATE INDEX idx_assignments_course_due ON assignments (course_id, due_at);
+CREATE INDEX idx_assignment_criteria_assignment ON assignment_criteria (assignment_id);
+CREATE INDEX idx_submissions_assignment_student ON submissions (assignment_id, student_id, submitted_at DESC);
+CREATE INDEX idx_submissions_status ON submissions (status);
+CREATE INDEX idx_grades_reviewer ON grades (reviewer_id, graded_at DESC);
+CREATE INDEX idx_grades_pending ON grades (submission_id) WHERE status = 'pending';
+CREATE INDEX idx_notifications_user_created ON notifications (user_id, created_at DESC);
+CREATE INDEX idx_import_error_request ON import_error_log (request_id, created_at DESC);
+CREATE INDEX idx_course_leaderboard_total ON course_leaderboard_cache (course_id, total_score DESC);
