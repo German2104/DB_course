@@ -146,7 +146,7 @@ class Notification(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey('users.id', ondelete='CASCADE', onupdate='CASCADE'))
     type: Mapped[str] = mapped_column(Text, nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
-    metadata: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    meta: Mapped[dict] = mapped_column('metadata', JSONB, nullable=False, default=dict)
     is_read: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(nullable=False, default=datetime.utcnow)
     sent_at: Mapped[datetime | None] = mapped_column(default=None)
