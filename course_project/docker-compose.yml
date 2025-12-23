@@ -29,6 +29,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     ports:
       - "8000:8000"
     healthcheck:
@@ -49,6 +51,7 @@ services:
       postgres:
         condition: service_healthy
     command: ["alembic", "upgrade", "head"]
+    restart: "no"
     networks:
       - lmsnet
 
