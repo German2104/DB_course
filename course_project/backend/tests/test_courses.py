@@ -1,30 +1,37 @@
+from pathlib import Path
+import sys
 from types import SimpleNamespace
+from unittest import TestCase
+from unittest.mock import patch
+
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
 
 from fastapi.testclient import TestClient
 
-from app import crud
 from app.main import app
 
 
-def test_list_courses_returns_payload(monkeypatch):
-    def fake_list_courses(_session):
-        return [
-            SimpleNamespace(
-                id=1,
-                code="DB-01",
-                title="Базы данных",
-                description="Описание",
-                start_date="2024-01-01",
-                end_date="2024-06-01",
-                is_active=True,
-            )
-        ]
+class TestCourses(TestCase):
+    def test_list_courses_returns_payload(self):
+        def fake_list_courses(_session):
+            return [
+                SimpleNamespace(
+                    id=1,
+                    code="DB-01",
+                    title="Базы данных",
+                    description="Описание",
+                    start_date="2024-01-01",
+                    end_date="2024-06-01",
+                    is_active=True,
+                )
+            ]
 
-    monkeypatch.setattr(crud, "list_courses", fake_list_courses)
+        with patch("app.crud.list_courses", side_effect=fake_list_courses):
+            client = TestClient(app)
+            response = client.get("/api/courses")
 
-    client = TestClient(app)
-    response = client.get("/api/courses")
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload[0]["code"] == "DB-01"
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload[0]["code"], "DB-01")

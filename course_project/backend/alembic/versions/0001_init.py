@@ -8,6 +8,8 @@ Create Date: 2024-01-01 00:00:00
 from pathlib import Path
 from alembic import op
 
+from app.sql_utils import split_sql_statements
+
 revision = '0001_init'
 down_revision = None
 branch_labels = None
@@ -19,7 +21,9 @@ DB_DIR = Path('/db')
 
 def _run_sql(filename: str) -> None:
     sql_path = DB_DIR / filename
-    op.execute(sql_path.read_text(encoding='utf-8'))
+    sql_text = sql_path.read_text(encoding='utf-8')
+    for statement in split_sql_statements(sql_text):
+        op.execute(statement)
 
 
 def upgrade() -> None:
