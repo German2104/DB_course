@@ -103,10 +103,20 @@ async def main():
     notifications = []
 
     submission_id = 1
-    for _ in range(6000):
+    seen_attempts = set()
+    target_submissions = 6000
+
+    while len(submissions) < target_submissions:
         assignment_id = random.choice(assignment_ids)
         student_id = random.choice(students)
         attempt_no = random.randint(1, 3)
+
+        # Avoid violating the unique constraint on (assignment_id, student_id, attempt_no).
+        attempt_key = (assignment_id, student_id, attempt_no)
+        if attempt_key in seen_attempts:
+            continue
+        seen_attempts.add(attempt_key)
+
         submitted_at = datetime.utcnow() - timedelta(days=random.randint(0, 20))
         status = random.choice(['submitted', 'in_review', 'accepted', 'rejected'])
         is_late = random.choice([True, False])
