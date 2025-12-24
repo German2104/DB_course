@@ -1,5 +1,10 @@
 FROM node:20-alpine AS build
 WORKDIR /app
+
+# Позволяет задавать адрес backend на этапе сборки (по умолчанию – docker‑сервис "backend")
+ARG BACKEND_URL=http://backend:8000
+ENV BACKEND_URL=${BACKEND_URL}
+
 COPY frontend/package.json ./package.json
 RUN npm install
 COPY frontend/ ./
