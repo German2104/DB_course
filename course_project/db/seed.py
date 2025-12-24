@@ -11,6 +11,12 @@ fake = Faker('ru_RU')
 
 async def main():
     database_url = os.getenv('DATABASE_URL', 'postgresql://postgres:postgres@localhost:5432/lms')
+
+    # asyncpg expects a plain "postgresql://" DSN, while the application uses
+    # SQLAlchemy's async driver prefix ("postgresql+asyncpg://"). Allow both by
+    # normalizing the scheme for the seed utility.
+    if database_url.startswith('postgresql+asyncpg://'):
+        database_url = database_url.replace('postgresql+asyncpg://', 'postgresql://', 1)
     conn = await asyncpg.connect(database_url)
 
     await conn.execute('TRUNCATE TABLE import_error_log, notifications, grades, submission_files, submissions, assignment_criteria, assignments, course_enrollments, course_instructors, courses, users RESTART IDENTITY CASCADE')
